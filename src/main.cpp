@@ -1,5 +1,21 @@
 #include <Arduino.h>
 #include <LiquidCrystal.h>
+#include <EEPROM.h>
+
+#define MAGIC_VALUE 0x12345678
+
+/////////////////////////////////////////////////////////////////////////
+// STRUCTS //////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////
+
+struct Settings {
+  unsigned int alarm_hours;
+  unsigned int alarm_minutes;
+  bool alarmStatus;
+  uint32_t magic;
+};
+
+Settings settings;
 
 /////////////////////////////////////////////////////////////////////////
 // ENUMS ////////////////////////////////////////////////////////////////
@@ -58,7 +74,7 @@ unsigned long lastUpdate = 0;
 
 // ALARM
 bool alarmStatus = true;
-unsigned int alarm_hourse = 6;
+unsigned int alarm_hours = 6;
 unsigned int alarm_minutes = 0;
 
 // DISPLAY
@@ -68,7 +84,34 @@ LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
 // FUNCTIONS ////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////
 
-// TIME
+// EEPROM ///////////////////////////////////////////////////////////////
+void saveSettings() {
+  settings.alarm_hours = alarm_hours;
+  settings.alarm_minutes = alarm_minutes;
+  settings.alarmStatus = alarmStatus;
+  settings.magic = MAGIC_VALUE;
+
+  EEPROM.put(0, settings);
+}
+
+void loadSettings() {
+  EEPROM.get(0, settings);
+
+  if (settings.magic == MAGIC_VALUE) {
+    alarm_hours = settings.alarm_hours;
+    alarm_minutes = settings.alarm_minutes;
+    alarmStatus = settings.alarmStatus;
+    Serial.println("Loading settings");
+  } 
+  else {
+    alarm_hours = 12;
+    alarm_minutes = 1;
+    alarmStatus = true;
+    Serial.println("No prior settings found. Setting defaults.");
+  }
+}
+
+// TIME /////////////////////////////////////////////////////////////////
 String getTime() {
   char buffer[16];
     snprintf(buffer, sizeof(buffer), "%2d:%02d:%02d", time_hours, time_minutes, time_seconds);
@@ -105,7 +148,7 @@ void updateTime() {
   }
 }
 
-// TEMPERATURE
+// TEMPERATURE //////////////////////////////////////////////////////////
 void updateTemperature() {
   if (millis() - lastUpdate < 1000 && !firstReading) {
     return;
@@ -128,30 +171,32 @@ void beginTemperature() {
     firstReading = false;
 }
 
-// ALARM
+// ALARM ////////////////////////////////////////////////////////////////
 void updateAlarm() {
-  if (time_hours == alarm_hourse && time_minutes == alarm_minutes && alarmStatus) {
+  if (time_hours == alarm_hours && time_minutes == alarm_minutes && alarmStatus) {
     // START BUZZER
   }
 }
 
 String getAlarm() {
   char buffer[16];
-  snprintf(buffer, sizeof(buffer), "%2d:%02d", alarm_hourse, alarm_minutes);
+  snprintf(buffer, sizeof(buffer), "%2d:%02d", alarm_hours, alarm_minutes);
   return String(buffer);
 }
 
 void setAlarm(unsigned int hours, unsigned int minutes) {
-  alarm_hourse = hours;
+  alarm_hours = hours;
   alarm_minutes = minutes;
+  saveSettings();
 }
 
 void toggleAlarm() {
   lcd.clear();
   alarmStatus = !alarmStatus;
+  saveSettings(); 
 }
 
-// DISPLAY
+// DISPLAY //////////////////////////////////////////////////////////////
 void displayBasicInfo() {
   lcd.print(getTime());
   lcd.setCursor(10, 0);
@@ -202,7 +247,7 @@ void displaySelectedMenu(MenuState menuState) {
   }
 }
 
-// HELPER FUNCTIONS
+// HELPER FUNCTIONS /////////////////////////////////////////////////////
 void waitRelease(int pin) {
   while (digitalRead(pin) == LOW) {}
 }
@@ -227,7 +272,7 @@ int wrapValues(int value, int limit, bool isIncrement) {
   return value;
 }
 
-// BUTTONS
+// BUTTONS //////////////////////////////////////////////////////////////
 void handleMenuButtonPress() {
   if (menuState != MENU_TOGGLE_ALARM) {
     menuState = static_cast<MenuState>(static_cast<int>(menuState) + 1);
@@ -294,7 +339,7 @@ void handlePlusButtonPress() {
         temp_time_hours = wrapValues(temp_time_hours, 23, true);
       }
       else if (setAlarmState == ALARM_HOURS) {
-        alarm_hourse = wrapValues(alarm_hourse, 23, true);
+        alarm_hours = wrapValues(alarm_hours, 23, true);
       }
     } 
     else if (setTimeState == TIME_MINUTES || setAlarmState == ALARM_MINUTES) {
@@ -325,7 +370,7 @@ void handleMinusButtonPress() {
         temp_time_hours = wrapValues(temp_time_hours, 23, false);
       }
       else if (setAlarmState == ALARM_HOURS) {
-        alarm_hourse = wrapValues(alarm_hourse, 23, false);
+        alarm_hours = wrapValues(alarm_hours, 23, false);
       }
     } 
     else if (setTimeState == TIME_MINUTES || setAlarmState == ALARM_MINUTES) {
@@ -360,13 +405,14 @@ void update() {
 
 void setup() {
   Serial.begin(115200);
+  lcd.begin(16, 2);
 
   pinMode(A2, INPUT_PULLUP);
   pinMode(A3, INPUT_PULLUP);
   pinMode(A4, INPUT_PULLUP);
   pinMode(A5, INPUT_PULLUP);
-  
-  lcd.begin(16, 2);
+
+  loadSettings();
   beginTemperature();
 }
 
