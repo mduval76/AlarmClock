@@ -5,15 +5,32 @@
 // ENUMS ////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////
 
-// MENU
-enum MenuState {
-  CLOSED,
-  TIME,
-  ALARM,
-  TOGGLE_ALARM
+// TIME
+enum SetTimeState {
+  TIME_NONE,
+  TIME_HOURS,
+  TIME_MINUTES,
+  TIME_SECONDS
 };
 
-MenuState menuState = CLOSED;
+// ALARM
+enum SetAlarmState {
+  ALARM_NONE,
+  ALARM_HOURS,
+  ALARM_MINUTES
+};
+
+// MENU
+enum MenuState {
+  MENU_NONE,
+  MENU_TIME,
+  MENU_ALARM,
+  MENU_TOGGLE_ALARM
+};
+
+MenuState menuState = MENU_NONE;
+SetTimeState setTimeState = TIME_NONE;
+SetAlarmState setAlarmState = ALARM_NONE;
 
 /////////////////////////////////////////////////////////////////////////
 // VARIABLES ////////////////////////////////////////////////////////////
@@ -23,6 +40,9 @@ MenuState menuState = CLOSED;
 unsigned int time_hours = 12;
 unsigned int time_minutes = 0;
 unsigned int time_seconds = 0;
+unsigned int temp_time_hours = 12;
+unsigned int temp_time_minutes = 0;
+unsigned int temp_time_seconds = 0;
 
 // TEMPERATURE
 bool firstReading = true;
@@ -44,17 +64,38 @@ LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
 // TIME
 String getTime() {
   char buffer[16];
-  snprintf(buffer, sizeof(buffer), "%2d:%02d:%02d", time_hours, time_minutes, time_seconds);
+    snprintf(buffer, sizeof(buffer), "%2d:%02d:%02d", time_hours, time_minutes, time_seconds);
+  return String(buffer);
+}
+
+String getTempTime() {
+  char buffer[16];
+  snprintf(buffer, sizeof(buffer), "%2d:%02d:%02d", temp_time_hours, temp_time_minutes, time_seconds);
   return String(buffer);
 }
 
 void updateTime() {
-  time_seconds = (millis() / 1000);
-  time_minutes = (time_seconds / 60);
-  time_hours += (time_minutes / 60);
-
-  time_seconds %= 60;
-  time_minutes %= 60;
+  static unsigned long lastMillis = 0;
+  unsigned long currentMillis = millis();
+  
+  if (currentMillis - lastMillis >= 1000) {
+    lastMillis = currentMillis;
+    
+    time_seconds++;
+    if (time_seconds >= 60) {
+      time_seconds = 0;
+      time_minutes++;
+      
+      if (time_minutes >= 60) {
+        time_minutes = 0;
+        time_hours++;
+        
+        if (time_hours >= 24) {
+          time_hours = 0;
+        }
+      }
+    }
+  }
 }
 
 // TEMPERATURE
@@ -103,7 +144,6 @@ void toggleAlarm() {
 }
 
 // DISPLAY
-
 void displayBasicInfo() {
   lcd.print(getTime());
   lcd.setCursor(10, 0);
@@ -117,14 +157,14 @@ void displayBasicInfo() {
 void displayTimeMenu() {
   lcd.print("Menu: Heure");
   lcd.setCursor(0, 1);
-  lcd.print(getTime());
+  lcd.print(getTempTime());
 }
 
 void displayAlarmMenu() {
   lcd.print("Menu: Alarme");
     lcd.setCursor(0, 1);
 
-  if (menuState == ALARM){
+  if (menuState == MENU_ALARM){
     lcd.print(getAlarm());
   } 
   else {
@@ -135,20 +175,19 @@ void displayAlarmMenu() {
 
 void displaySelectedMenu(MenuState menuState) {
   switch (menuState) {
-    case CLOSED:
+    case MENU_NONE:
       displayBasicInfo();
       break;
-    case TIME:
+    case MENU_TIME:
       displayTimeMenu();
       break;
-    case ALARM:
+    case MENU_ALARM:
       displayAlarmMenu();
       break;
-    case TOGGLE_ALARM:
+    case MENU_TOGGLE_ALARM:
       displayAlarmMenu();
       break;
     default:
-      displayBasicInfo();
       break;
   }
 }
@@ -158,9 +197,102 @@ void waitRelease(int pin) {
   while (digitalRead(pin) == LOW) {}
 }
 
+// BUTTONS
+void handleMenuButtonPress() {
+  if (menuState != MENU_TOGGLE_ALARM) {
+    menuState = static_cast<MenuState>(static_cast<int>(menuState) + 1);
+  }
+  else {
+    menuState = MENU_NONE;
+    setTimeState = TIME_NONE;
+  }
+  Serial.println("MenuState = " + String(menuState));
+  lcd.clear();
+}
+
+void handleSetButtonPress() {
+  if (setTimeState != TIME_SECONDS) {
+    setTimeState = static_cast<SetTimeState>(static_cast<int>(setTimeState) + 1);
+  } 
+  else {
+    time_hours = temp_time_hours;
+    time_minutes = temp_time_minutes;
+
+    setTimeState = TIME_NONE;
+    menuState = MENU_NONE;
+    
+    lcd.clear();
+    Serial.println("SET Menu = " + String(menuState));
+  }
+  Serial.println("SET Time= " + String(setTimeState));
+}
+
+void handlePlusButtonPress() {
+  if (menuState == MENU_TIME) {
+    if (setTimeState == TIME_HOURS) {
+      if (temp_time_hours < 23) {
+        temp_time_hours++;
+      } else {
+        temp_time_hours = 0;
+      }
+    } 
+    else if (setTimeState == TIME_MINUTES) {
+      if (temp_time_minutes < 59) {
+        temp_time_minutes++;
+      } else {
+        temp_time_minutes = 0;
+        if (temp_time_hours < 23) {
+          temp_time_hours++;
+        } else {
+          temp_time_hours = 0;
+        }
+      }
+    } 
+    else if (setTimeState == TIME_SECONDS) {
+      time_seconds = 0;
+      temp_time_seconds = 0;
+    }
+  }
+  waitRelease(A4);
+}
+
+void handleMinusButtonPress() {
+   if (menuState == MENU_TIME) {
+    if (setTimeState == TIME_HOURS) {
+      if (temp_time_hours > 0) {
+        temp_time_hours--;
+      } else {
+        temp_time_hours = 23;
+      }
+    } 
+    else if (setTimeState == TIME_MINUTES) {
+      if (temp_time_minutes > 0) {
+        temp_time_minutes--;
+      } else {
+        temp_time_minutes = 59;
+        if (temp_time_hours > 0) {
+          temp_time_hours--;
+        } else {
+          temp_time_hours = 23;
+        }
+      }
+    } 
+    else if (setTimeState == TIME_SECONDS) {
+      time_seconds = 0;
+      temp_time_seconds = 0;
+    }
+  }
+  waitRelease(A5);
+}
+
 /////////////////////////////////////////////////////////////////////////
 // MAIN /////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////
+
+void update() {
+  updateTime();
+  updateTemperature();
+}
 
 void setup() {
   Serial.begin(115200);
@@ -174,11 +306,6 @@ void setup() {
   beginTemperature();
 }
 
-void update() {
-  updateTime();
-  updateTemperature();
-}
-
 void loop() {
   int menuBtn = digitalRead(A2);
   int setBtn = digitalRead(A3);
@@ -186,21 +313,22 @@ void loop() {
   int minusBtn = digitalRead(A5);
 
   if (menuBtn == LOW) {
-    if (menuState != TOGGLE_ALARM) {
-      menuState = static_cast<MenuState>(static_cast<int>(menuState) + 1);
-    }
-    else {
-      menuState = CLOSED;
-    }
-    lcd.clear();
+    handleMenuButtonPress();
   }
-
+  else if (setBtn == LOW) {
+    handleSetButtonPress();
+  }
+  else if (plusBtn == LOW) {
+    handlePlusButtonPress();
+  }
+  else if (minusBtn == LOW) {
+    handleMinusButtonPress();
+  }
+  
   displaySelectedMenu(menuState);
   lcd.home();
   update();
 
   if (menuBtn == LOW) { waitRelease(A2); }
   if (setBtn == LOW) { waitRelease(A3); }
-  if (plusBtn == LOW) { waitRelease(A4); }
-  if (minusBtn == LOW) { waitRelease(A5); }
 }
