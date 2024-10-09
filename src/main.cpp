@@ -20,6 +20,12 @@ enum SetAlarmState {
   ALARM_MINUTES
 };
 
+// TOGGLE
+enum SetToggleState {
+  TOGGLE_NONE,
+  TOGGLE_ALARM
+};
+
 // MENU
 enum MenuState {
   MENU_NONE,
@@ -31,6 +37,7 @@ enum MenuState {
 MenuState menuState = MENU_NONE;
 SetTimeState setTimeState = TIME_NONE;
 SetAlarmState setAlarmState = ALARM_NONE;
+SetToggleState setToggleState = TOGGLE_NONE;
 
 /////////////////////////////////////////////////////////////////////////
 // VARIABLES ////////////////////////////////////////////////////////////
@@ -140,6 +147,7 @@ void setAlarm(unsigned int hours, unsigned int minutes) {
 }
 
 void toggleAlarm() {
+  lcd.clear();
   alarmStatus = !alarmStatus;
 }
 
@@ -169,7 +177,9 @@ void displayAlarmMenu() {
   } 
   else {
     lcd.setCursor(1, 1);
-    lcd.print(alarmStatus ? "(ON)" : "(OFF)");
+    lcd.print("(");
+    lcd.print(alarmStatus ? "ON" : "OFF");
+    lcd.print(")");
   }
 }
 
@@ -262,11 +272,18 @@ void handleSetButtonPress() {
     Serial.println("SET Alarm = " + String(setAlarmState));
   }
   else if (menuState == MENU_TOGGLE_ALARM) {
-    menuState = MENU_NONE;
+    if (setToggleState != TOGGLE_ALARM) {
+      setToggleState = static_cast<SetToggleState>(static_cast<int>(setToggleState) + 1);
+    } 
+    else {
+      setToggleState = TOGGLE_NONE;
+      menuState = MENU_NONE;
+      Serial.println("SET Menu > Toggle = " + String(menuState));
+    }
     lcd.clear();
-    Serial.println("SET Menu > Toggle Alarm = " + String(menuState));
-    Serial.println("Alarm Status = " + String(alarmStatus));
+    Serial.println("SET Toggle = " + String(setToggleState));
   }
+  
   waitRelease(A3);
 }
 
@@ -293,6 +310,11 @@ void handlePlusButtonPress() {
       temp_time_seconds = 0;
     }
   }
+  else if (menuState == MENU_TOGGLE_ALARM) {
+    if (setToggleState == TOGGLE_ALARM) {
+      toggleAlarm();
+    }
+  }
   waitRelease(A4);
 }
 
@@ -317,6 +339,11 @@ void handleMinusButtonPress() {
     else if (setTimeState == TIME_SECONDS) {
       time_seconds = 0;
       temp_time_seconds = 0;
+    }
+  }
+  else if (menuState == MENU_TOGGLE_ALARM) {
+    if (setToggleState == TOGGLE_ALARM) {
+      toggleAlarm();
     }
   }
   waitRelease(A5);
