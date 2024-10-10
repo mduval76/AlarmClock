@@ -206,10 +206,14 @@ unsigned long lastUpdate = 0;
 // ALARM
 bool alarmPlaying = false;
 bool alarmStatus = true;
+bool isSnoozing = false;
 unsigned int alarm_hours = 6;
 unsigned int alarm_minutes = 0;
 unsigned long alarmStartTime = 0;
 unsigned long lastNoteTime = 0;
+unsigned long lastSnoozeUpdate = 0;
+unsigned long lastLedToggleTime = 0;
+bool ledState = false;
 
 // DISPLAY
 LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
@@ -335,28 +339,25 @@ void soundAlarm() {
       currentNote = 0;
     }
   }
-
-  // for (int thisNote = 0; thisNote < notes * 2; thisNote = thisNote + 2) {
-  //   divider = melody[thisNote + 1];
-  //   if (divider > 0) {
-  //     noteDuration = (wholenote) / divider;
-  //   } else if (divider < 0) {
-  //     noteDuration = (wholenote) / abs(divider);
-  //     noteDuration *= 1.5;
-  //   }
-  //   tone(buzzer, melody[thisNote], noteDuration * 0.9);
-  //   delay(noteDuration);
-  //   noTone(buzzer);
-  // }
 }
 
 void updateAlarm() {
-  if (time_hours == alarm_hours && time_minutes == alarm_minutes && alarmStatus && !alarmPlaying) {
-    soundAlarm();
+  if (isSnoozing) {
+    if (millis() - lastSnoozeUpdate >= 120000) { // TODO: Change back to 2 minutes
+      isSnoozing = false;
+      alarmPlaying = true;
+      currentNote = 0;
+    }
   }
+  else {
+    if (time_hours == alarm_hours && time_minutes == alarm_minutes && alarmStatus && !alarmPlaying) {
+      soundAlarm();
+      alarmPlaying = true;
+    }
 
-  if (alarmPlaying) {
-    soundAlarm();
+    if (alarmPlaying) {
+      soundAlarm();
+    }
   }
 }
 
@@ -384,6 +385,26 @@ void stopAlarm() {
   currentNote = 0;
 }
 
+void handleAlarmLED() {
+  unsigned long currentTime = millis();
+
+  if (alarmPlaying && !isSnoozing) {
+    if (ledState && (currentTime - lastLedToggleTime >= 250)) {
+      digitalWrite(13, LOW);
+      ledState = false;
+      lastLedToggleTime = currentTime;
+    } 
+    else if (!ledState && (currentTime - lastLedToggleTime >= 500)) {
+      digitalWrite(13, HIGH);
+      ledState = true;
+      lastLedToggleTime = currentTime;
+    }
+  }
+  else {
+    digitalWrite(13, LOW);
+  }
+}
+
 // DISPLAY //////////////////////////////////////////////////////////////
 void displayBasicInfo() {
   lcd.print(getTime());
@@ -403,7 +424,7 @@ void displayTimeMenu() {
 
 void displayAlarmMenu() {
   lcd.print("Menu: Alarme");
-    lcd.setCursor(0, 1);
+  lcd.setCursor(0, 1);
 
   if (menuState == MENU_ALARM){
     lcd.print(getAlarm());
@@ -462,13 +483,21 @@ int wrapValues(int value, int limit, bool isIncrement) {
 
 // BUTTONS //////////////////////////////////////////////////////////////
 void handleMenuButtonPress() {
-  if (menuState != MENU_TOGGLE_ALARM) {
-    menuState = static_cast<MenuState>(static_cast<int>(menuState) + 1);
-  }
+  if (alarmPlaying && !isSnoozing) {
+    isSnoozing = true;
+    lastSnoozeUpdate = millis();
+    Serial.println("Snooze activated");
+  } 
   else {
-    menuState = MENU_NONE;
-    setTimeState = TIME_NONE;
+    if (menuState != MENU_TOGGLE_ALARM) {
+      menuState = static_cast<MenuState>(static_cast<int>(menuState) + 1);
+    }
+    else {
+      menuState = MENU_NONE;
+      setTimeState = TIME_NONE;
+    }
   }
+  
   Serial.println("MenuState = " + String(menuState));
   lcd.clear();
   waitRelease(A2);
@@ -600,6 +629,7 @@ void setup() {
   pinMode(A3, INPUT_PULLUP);
   pinMode(A4, INPUT_PULLUP);
   pinMode(A5, INPUT_PULLUP);
+  pinMode(13, OUTPUT);
 
   loadSettings();
   beginTemperature();
@@ -611,6 +641,8 @@ void loop() {
   int plusBtn = digitalRead(A4);
   int minusBtn = digitalRead(A5);
 
+  handleAlarmLED();
+  
   if (menuBtn == LOW) { handleMenuButtonPress(); }
   else if (setBtn == LOW) { handleSetButtonPress(); }
   else if (plusBtn == LOW) { handlePlusButtonPress(); }
