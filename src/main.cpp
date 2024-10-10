@@ -227,7 +227,7 @@ LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
 // FUNCTIONS ////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////
 
-// HELPER FUNCTIONS /////////////////////////////////////////////////////
+// HELPER ///////////////////////////////////////////////////////////////
 void waitRelease(int pin) {
   while (digitalRead(pin) == LOW) {}
 }
@@ -331,12 +331,12 @@ void updateTemperature() {
 }
 
 double getTemperature() {
-    return tempCelsius;
+  return tempCelsius;
 }
 
 void beginTemperature() {
-    updateTemperature();
-    firstReading = false;
+  updateTemperature();
+  firstReading = false;
 }
 
 // ALARM ////////////////////////////////////////////////////////////////
@@ -385,11 +385,11 @@ void stopAlarm() {
   currentNote = 0;
   alarmStoppedManually = true;
   
-  alarmRestartDelay = (60 - time_seconds) * 1000; // Calculate remaining milliseconds until next minute
-  alarmStopTime = millis();  // Record the time when the alarm was stopped
+  alarmRestartDelay = (60 - time_seconds) * 1000;
+  alarmStopTime = millis();
 
-  setAlarm(alarm_hours, alarm_minutes);  // Reset the alarm to its current time
-  Serial.println("Alarm stopped. Will restart after " + String(alarmRestartDelay) + " ms.");
+  setAlarm(alarm_hours, alarm_minutes);
+  Serial.println("Alarm stopped.");
   waitRelease(A4);
   waitRelease(A5);
 }
@@ -397,21 +397,17 @@ void stopAlarm() {
 void updateAlarm() {
   if (isSnoozing) {
     Serial.println("Snoozing UpdateAlarm");
-    if (millis() - lastSnoozeTime >= 120000) {  // Snooze ends after 2 minutes
+    if (millis() - lastSnoozeTime >= 120000) {
       isSnoozing = false;
       currentNote = 0;
-      alarmStoppedManually = false;  // Reset manually stopped status after snooze
+      alarmStoppedManually = false;
     }
   } 
   else if (!alarmStoppedManually && (millis() - alarmStopTime >= alarmRestartDelay)) {
-    //Serial.println("Reaching time and alarm check");
-
-    // Check if the time matches and alarm is ready to play
     if (time_hours == alarm_hours && time_minutes == alarm_minutes && alarmStatus && !alarmPlaying) {
       soundAlarm();
     }
 
-    // Continue playing the alarm if it has already started
     if (alarmPlaying) {
       soundAlarm();
     }
@@ -509,14 +505,11 @@ void displaySelectedMenu(MenuState menuState) {
   }
 }
 
-
-
 // BUTTONS //////////////////////////////////////////////////////////////
 void handleMenuButtonPress() {
   if (alarmPlaying && !isSnoozing) {
     isSnoozing = true;
     lastSnoozeTime = millis();
-    Serial.println("Snooze activated");
   } 
   else {
     if (menuState != MENU_TOGGLE_ALARM) {
@@ -541,7 +534,7 @@ void handleMenuButtonPress() {
 void handleSetButtonPress() {
   if (menuState == MENU_TIME) {
     if (setTimeState != TIME_SECONDS) {
-        setTimeState = static_cast<SetTimeState>(static_cast<int>(setTimeState) + 1);
+      setTimeState = static_cast<SetTimeState>(static_cast<int>(setTimeState) + 1);
     } 
     else {
       time_hours = temp_time_hours;
@@ -551,9 +544,7 @@ void handleSetButtonPress() {
       menuState = MENU_NONE;
       
       lcd.clear();
-      Serial.println("SET Menu > Time = " + String(menuState));
     }
-    Serial.println("SET Time = " + String(setTimeState));
   }
   else if (menuState == MENU_ALARM) {
 
@@ -566,9 +557,7 @@ void handleSetButtonPress() {
 
       setAlarm(temp_alarm_hours, temp_alarm_minutes);
       lcd.clear();
-      Serial.println("SET Menu > Alarm = " + String(menuState));
     }
-    Serial.println("SET Alarm = " + String(setAlarmState));
   }
   else if (menuState == MENU_TOGGLE_ALARM) {
     if (setToggleState != TOGGLE_ALARM) {
@@ -577,10 +566,8 @@ void handleSetButtonPress() {
     else {
       setToggleState = TOGGLE_NONE;
       menuState = MENU_NONE;
-      Serial.println("SET Menu > Toggle = " + String(menuState));
     }
     lcd.clear();
-    Serial.println("SET Toggle = " + String(setToggleState));
   }
   waitRelease(A3);
 }
@@ -687,7 +674,6 @@ void loop() {
   }
   else if (plusBtn == LOW) {
     if (digitalRead(A5) == LOW) {
-      Serial.println("Stopping alarm");
       stopAlarm();
       return;
     }
@@ -695,7 +681,6 @@ void loop() {
   }
   else if (minusBtn == LOW) { 
     if (digitalRead(A4) == LOW) {
-      Serial.println("Stopping alarm");
       stopAlarm();
       return;
     }
