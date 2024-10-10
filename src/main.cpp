@@ -331,7 +331,7 @@ void updateTemperature() {
 }
 
 double getTemperature() {
-  return tempCelsius;
+    return tempCelsius;
 }
 
 void beginTemperature() {
@@ -534,7 +534,7 @@ void handleMenuButtonPress() {
 void handleSetButtonPress() {
   if (menuState == MENU_TIME) {
     if (setTimeState != TIME_SECONDS) {
-      setTimeState = static_cast<SetTimeState>(static_cast<int>(setTimeState) + 1);
+        setTimeState = static_cast<SetTimeState>(static_cast<int>(setTimeState) + 1);
     } 
     else {
       time_hours = temp_time_hours;
