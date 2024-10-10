@@ -207,13 +207,16 @@ unsigned long lastUpdate = 0;
 bool alarmPlaying = false;
 bool alarmStatus = true;
 bool isSnoozing = false;
+bool ledState = false;
+bool alarmStoppedManually = false;
 unsigned int alarm_hours = 6;
 unsigned int alarm_minutes = 0;
 unsigned long alarmStartTime = 0;
+unsigned long alarmStopTime = 0;
 unsigned long lastNoteTime = 0;
-unsigned long lastSnoozeUpdate = 0;
+unsigned long lastSnoozeTime = 0;
 unsigned long lastLedToggleTime = 0;
-bool ledState = false;
+unsigned long alarmRestartDelay = 0;
 
 // DISPLAY
 LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
@@ -245,7 +248,7 @@ void loadSettings() {
     alarm_hours = 12;
     alarm_minutes = 1;
     alarmStatus = true;
-    Serial.println("No prior settings found. Setting defaults.");
+    Serial.println("Setting defaults.");
   }
 }
 
@@ -319,7 +322,7 @@ void soundAlarm() {
 
   unsigned long currentTime = millis();
 
-  if (currentTime - lastNoteTime >= noteDuration) {
+  if (currentTime - lastNoteTime >= static_cast<unsigned long>(noteDuration)) {
     lastNoteTime = currentTime;
     noTone(buzzer);
 
@@ -341,20 +344,48 @@ void soundAlarm() {
   }
 }
 
+void setAlarm(unsigned int hours, unsigned int minutes) {
+  alarm_hours = hours;
+  alarm_minutes = minutes;
+  alarmStoppedManually = false;
+  Serial.println("AlarmPlaying = " + String(alarmPlaying));
+  Serial.println("AlarmStoppedManually = " + String(alarmStoppedManually));
+  Serial.println("IsSnoozing = " + String(isSnoozing));
+  saveSettings();
+}
+
+void stopAlarm() {
+  noTone(buzzer);
+  isSnoozing = false;
+  alarmPlaying = false;
+  currentNote = 0;
+  alarmStoppedManually = true;
+  
+  alarmRestartDelay = (60 - time_seconds) * 1000; // Calculate remaining milliseconds until next minute
+  alarmStopTime = millis();  // Record the time when the alarm was stopped
+
+  setAlarm(alarm_hours, alarm_minutes);  // Reset the alarm to its current time
+  Serial.println("Alarm stopped. Will restart after " + String(alarmRestartDelay) + " ms.");
+}
+
 void updateAlarm() {
   if (isSnoozing) {
-    if (millis() - lastSnoozeUpdate >= 120000) { // TODO: Change back to 2 minutes
+    Serial.println("Snoozing UpdateAlarm");
+    if (millis() - lastSnoozeTime >= 120000) {  // Snooze ends after 2 minutes
       isSnoozing = false;
-      alarmPlaying = true;
       currentNote = 0;
+      alarmStoppedManually = false;  // Reset manually stopped status after snooze
     }
-  }
-  else {
+  } 
+  else if (!alarmStoppedManually && (millis() - alarmStopTime >= alarmRestartDelay)) {
+    //Serial.println("Reaching time and alarm check");
+
+    // Check if the time matches and alarm is ready to play
     if (time_hours == alarm_hours && time_minutes == alarm_minutes && alarmStatus && !alarmPlaying) {
       soundAlarm();
-      alarmPlaying = true;
     }
 
+    // Continue playing the alarm if it has already started
     if (alarmPlaying) {
       soundAlarm();
     }
@@ -367,22 +398,11 @@ String getAlarm() {
   return String(buffer);
 }
 
-void setAlarm(unsigned int hours, unsigned int minutes) {
-  alarm_hours = hours;
-  alarm_minutes = minutes;
-  saveSettings();
-}
-
 void toggleAlarm() {
   lcd.clear();
   alarmStatus = !alarmStatus;
+  alarmStoppedManually = false; 
   saveSettings(); 
-}
-
-void stopAlarm() {
-  noTone(buzzer);
-  alarmPlaying = false;
-  currentNote = 0;
 }
 
 void handleAlarmLED() {
@@ -452,6 +472,7 @@ void displaySelectedMenu(MenuState menuState) {
       displayAlarmMenu();
       break;
     default:
+      lcd.print("You screwed up");
       break;
   }
 }
@@ -485,7 +506,7 @@ int wrapValues(int value, int limit, bool isIncrement) {
 void handleMenuButtonPress() {
   if (alarmPlaying && !isSnoozing) {
     isSnoozing = true;
-    lastSnoozeUpdate = millis();
+    lastSnoozeTime = millis();
     Serial.println("Snooze activated");
   } 
   else {
@@ -496,9 +517,9 @@ void handleMenuButtonPress() {
       menuState = MENU_NONE;
       setTimeState = TIME_NONE;
     }
+    Serial.println("MenuState = " + String(menuState));
   }
   
-  Serial.println("MenuState = " + String(menuState));
   lcd.clear();
   waitRelease(A2);
 }
@@ -529,6 +550,7 @@ void handleSetButtonPress() {
       menuState = MENU_NONE;
 
       lcd.clear();
+      setAlarm(alarm_hours, alarm_minutes);
       Serial.println("SET Menu > Alarm = " + String(menuState));
     }
     Serial.println("SET Alarm = " + String(setAlarmState));
@@ -545,7 +567,6 @@ void handleSetButtonPress() {
     lcd.clear();
     Serial.println("SET Toggle = " + String(setToggleState));
   }
-  
   waitRelease(A3);
 }
 
@@ -643,10 +664,34 @@ void loop() {
 
   handleAlarmLED();
   
-  if (menuBtn == LOW) { handleMenuButtonPress(); }
-  else if (setBtn == LOW) { handleSetButtonPress(); }
-  else if (plusBtn == LOW) { handlePlusButtonPress(); }
-  else if (minusBtn == LOW) { handleMinusButtonPress(); }
+  if (menuBtn == LOW) { 
+    handleMenuButtonPress(); 
+  }
+  else if (setBtn == LOW) { 
+    handleSetButtonPress();
+  }
+  else if (plusBtn == LOW) {
+    if (digitalRead(A5) == LOW) {
+      Serial.println("Stopping alarm");
+      waitRelease(A4);
+      waitRelease(A5);
+      stopAlarm();
+      return;
+    }
+    
+    handlePlusButtonPress();
+  }
+  else if (minusBtn == LOW) { 
+    if (digitalRead(A4) == LOW) {
+      Serial.println("Stopping alarm");
+      waitRelease(A4);
+      waitRelease(A5);
+      stopAlarm();
+      return;
+    }
+    
+    handleMinusButtonPress();
+  }
   
   displaySelectedMenu(menuState);
   lcd.home();
