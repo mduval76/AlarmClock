@@ -517,10 +517,10 @@ void handleMenuButtonPress() {
       menuState = MENU_NONE;
       setTimeState = TIME_NONE;
     }
+    lcd.clear();
     Serial.println("MenuState = " + String(menuState));
   }
   
-  lcd.clear();
   waitRelease(A2);
 }
 
