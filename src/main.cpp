@@ -673,23 +673,21 @@ void loop() {
   else if (plusBtn == LOW) {
     if (digitalRead(A5) == LOW) {
       Serial.println("Stopping alarm");
+      stopAlarm();
       waitRelease(A4);
       waitRelease(A5);
-      stopAlarm();
       return;
     }
-    
     handlePlusButtonPress();
   }
   else if (minusBtn == LOW) { 
     if (digitalRead(A4) == LOW) {
       Serial.println("Stopping alarm");
+      stopAlarm();
       waitRelease(A4);
       waitRelease(A5);
-      stopAlarm();
       return;
     }
-    
     handleMinusButtonPress();
   }
   
