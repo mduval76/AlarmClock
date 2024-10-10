@@ -209,8 +209,10 @@ bool alarmStatus = true;
 bool isSnoozing = false;
 bool ledState = false;
 bool alarmStoppedManually = false;
-unsigned int alarm_hours = 6;
+unsigned int alarm_hours = 0;
 unsigned int alarm_minutes = 0;
+unsigned int temp_alarm_hours = 0;
+unsigned int temp_alarm_minutes = 0;
 unsigned long alarmStartTime = 0;
 unsigned long alarmStopTime = 0;
 unsigned long lastNoteTime = 0;
@@ -224,6 +226,31 @@ LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
 /////////////////////////////////////////////////////////////////////////
 // FUNCTIONS ////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////
+
+// HELPER FUNCTIONS /////////////////////////////////////////////////////
+void waitRelease(int pin) {
+  while (digitalRead(pin) == LOW) {}
+}
+
+int wrapValues(int value, int limit, bool isIncrement) {
+  if (isIncrement) {
+    if (value < limit) {
+      value++;
+    } 
+    else {
+      value = 0;
+    }
+  } 
+  else {
+    if (value > 0) {
+      value--;
+    } 
+    else {
+      value = limit;
+    }
+  }
+  return value;
+}
 
 // EEPROM ///////////////////////////////////////////////////////////////
 void saveSettings() {
@@ -348,9 +375,6 @@ void setAlarm(unsigned int hours, unsigned int minutes) {
   alarm_hours = hours;
   alarm_minutes = minutes;
   alarmStoppedManually = false;
-  Serial.println("AlarmPlaying = " + String(alarmPlaying));
-  Serial.println("AlarmStoppedManually = " + String(alarmStoppedManually));
-  Serial.println("IsSnoozing = " + String(isSnoozing));
   saveSettings();
 }
 
@@ -366,6 +390,8 @@ void stopAlarm() {
 
   setAlarm(alarm_hours, alarm_minutes);  // Reset the alarm to its current time
   Serial.println("Alarm stopped. Will restart after " + String(alarmRestartDelay) + " ms.");
+  waitRelease(A4);
+  waitRelease(A5);
 }
 
 void updateAlarm() {
@@ -395,6 +421,12 @@ void updateAlarm() {
 String getAlarm() {
   char buffer[16];
   snprintf(buffer, sizeof(buffer), "%2d:%02d", alarm_hours, alarm_minutes);
+  return String(buffer);
+}
+
+String getTempAlarm() {
+  char buffer[16];
+  snprintf(buffer, sizeof(buffer), "%2d:%02d", temp_alarm_hours, temp_alarm_minutes);
   return String(buffer);
 }
 
@@ -447,7 +479,7 @@ void displayAlarmMenu() {
   lcd.setCursor(0, 1);
 
   if (menuState == MENU_ALARM){
-    lcd.print(getAlarm());
+    lcd.print(getTempAlarm());
   } 
   else {
     lcd.setCursor(1, 1);
@@ -477,30 +509,7 @@ void displaySelectedMenu(MenuState menuState) {
   }
 }
 
-// HELPER FUNCTIONS /////////////////////////////////////////////////////
-void waitRelease(int pin) {
-  while (digitalRead(pin) == LOW) {}
-}
 
-int wrapValues(int value, int limit, bool isIncrement) {
-  if (isIncrement) {
-    if (value < limit) {
-      value++;
-    } 
-    else {
-      value = 0;
-    }
-  } 
-  else {
-    if (value > 0) {
-      value--;
-    } 
-    else {
-      value = limit;
-    }
-  }
-  return value;
-}
 
 // BUTTONS //////////////////////////////////////////////////////////////
 void handleMenuButtonPress() {
@@ -519,6 +528,11 @@ void handleMenuButtonPress() {
     }
     lcd.clear();
     Serial.println("MenuState = " + String(menuState));
+  }
+
+  if (menuState == MENU_ALARM) {
+    temp_alarm_hours = alarm_hours;
+    temp_alarm_minutes = alarm_minutes;
   }
   
   waitRelease(A2);
@@ -542,6 +556,7 @@ void handleSetButtonPress() {
     Serial.println("SET Time = " + String(setTimeState));
   }
   else if (menuState == MENU_ALARM) {
+
     if (setAlarmState != ALARM_MINUTES) {
       setAlarmState = static_cast<SetAlarmState>(static_cast<int>(setAlarmState) + 1);
     } 
@@ -549,8 +564,8 @@ void handleSetButtonPress() {
       setAlarmState = ALARM_NONE;
       menuState = MENU_NONE;
 
+      setAlarm(temp_alarm_hours, temp_alarm_minutes);
       lcd.clear();
-      setAlarm(alarm_hours, alarm_minutes);
       Serial.println("SET Menu > Alarm = " + String(menuState));
     }
     Serial.println("SET Alarm = " + String(setAlarmState));
@@ -577,7 +592,7 @@ void handlePlusButtonPress() {
         temp_time_hours = wrapValues(temp_time_hours, 23, true);
       }
       else if (setAlarmState == ALARM_HOURS) {
-        alarm_hours = wrapValues(alarm_hours, 23, true);
+        temp_alarm_hours = wrapValues(temp_alarm_hours, 23, true);
       }
     } 
     else if (setTimeState == TIME_MINUTES || setAlarmState == ALARM_MINUTES) {
@@ -585,7 +600,7 @@ void handlePlusButtonPress() {
         temp_time_minutes = wrapValues(temp_time_minutes, 59, true);
       }
       else if (setAlarmState == ALARM_MINUTES) {
-        alarm_minutes = wrapValues(alarm_minutes, 59, true);
+        temp_alarm_minutes = wrapValues(temp_alarm_minutes, 59, true);
       }
     } 
     else if (setTimeState == TIME_SECONDS) {
@@ -608,7 +623,7 @@ void handleMinusButtonPress() {
         temp_time_hours = wrapValues(temp_time_hours, 23, false);
       }
       else if (setAlarmState == ALARM_HOURS) {
-        alarm_hours = wrapValues(alarm_hours, 23, false);
+        temp_alarm_hours = wrapValues(temp_alarm_hours, 23, false);
       }
     } 
     else if (setTimeState == TIME_MINUTES || setAlarmState == ALARM_MINUTES) {
@@ -616,7 +631,7 @@ void handleMinusButtonPress() {
         temp_time_minutes = wrapValues(temp_time_minutes, 59, false);
       }
       else if (setAlarmState == ALARM_MINUTES) {
-        alarm_minutes = wrapValues(alarm_minutes, 59, false);
+        temp_alarm_minutes = wrapValues(temp_alarm_minutes, 59, false);
       }
     } 
     else if (setTimeState == TIME_SECONDS) {
@@ -674,8 +689,6 @@ void loop() {
     if (digitalRead(A5) == LOW) {
       Serial.println("Stopping alarm");
       stopAlarm();
-      waitRelease(A4);
-      waitRelease(A5);
       return;
     }
     handlePlusButtonPress();
@@ -684,8 +697,6 @@ void loop() {
     if (digitalRead(A4) == LOW) {
       Serial.println("Stopping alarm");
       stopAlarm();
-      waitRelease(A4);
-      waitRelease(A5);
       return;
     }
     handleMinusButtonPress();
